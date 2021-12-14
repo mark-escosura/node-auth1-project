@@ -1,18 +1,24 @@
 // Require `checkUsernameFree`, `checkUsernameExists` and `checkPasswordLength`
 // middleware functions from `auth-middleware.js`. You will need them here!
-const express = require('express')
-const router = express.Router()
+const express = require("express");
+const bcrypt = require("bcryptjs");
+const router = express.Router();
+const User = require("../users/users-model.js");
+const {
+  checkUsernameFree,
+  checkUsernameExists,
+  checkPasswordLength,
+} = require("./auth-middleware.js");
 
-router.post("/register", async (req, res, next) => {
-  try {
-    // 1- pull u and p from req.body
-    // 2- create a hash off of the password
-    // 3- we will store u and hash to the db
-    const { username, password } = req.body
-    // first we have to create our users-model
-  } catch(err) {
-    next(err)
-  }
+router.post("/register", [checkUsernameFree, checkPasswordLength], (req, res, next) => {
+  const { username, password } = req.body
+  const hash = bcrypt.hashSync(password, 8)
+  
+  User.add({ username, password: hash})
+  .then(users => {
+    res.status(201).json(users)
+  })
+  .catch(next)
 })
 /**
   1 [POST] /api/auth/register { "username": "sue", "password": "1234" }
@@ -37,7 +43,19 @@ router.post("/register", async (req, res, next) => {
   }
  */
 
-
+router.post("/login", checkUsernameExists, async (req, res, next) => {
+  try {
+    const { password } = req.body;
+    if (bcrypt.compareSync(password, req.user.password)) {
+      req.session.user = req.user;
+      next({ message: `Welcome back ${req.user.username}` });
+    } else {
+      next({ status: 401, message: "Invalid Credentials" });
+    }
+  } catch (err) {
+    next(err);
+  }
+});
 /**
   2 [POST] /api/auth/login { "username": "sue", "password": "1234" }
 
@@ -53,8 +71,19 @@ router.post("/register", async (req, res, next) => {
     "message": "Invalid credentials"
   }
  */
-
-
+router.get("/logout", (req, res, next) => {
+  if (req.session.user) {
+    res.session.destroy(err => {
+      if(err) {
+        next()
+      } else {
+        res.json({ message: "logged out"})
+      }
+    })
+  } else {
+    res.json({ message: "no session"})
+  }
+})
 /**
   3 [GET] /api/auth/logout
 
@@ -71,6 +100,5 @@ router.post("/register", async (req, res, next) => {
   }
  */
 
- 
 // Don't forget to add the router to the `exports` object so it can be required in other modules
-module.exports = router
+module.exports = router;
